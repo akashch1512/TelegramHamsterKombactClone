@@ -1,7 +1,7 @@
 import { shahnamehWide } from '../images';
 
 /** First-run intro, replacing public/persian_theme.html (Plan.md A11, D5). */
-export function IntroScreen({ onStart }: { onStart: () => void }) {
+export function IntroScreen({ onStart }: { onStart: (fromKeyboard: boolean) => void }) {
   return (
     <main className="scroll flex min-h-0 flex-1 flex-col px-6 py-6">
       <div className="m-auto flex w-full max-w-[340px] flex-col items-center gap-6 text-center">
@@ -23,7 +23,7 @@ export function IntroScreen({ onStart }: { onStart: () => void }) {
         <button
           type="button"
           autoFocus
-          onClick={onStart}
+          onClick={(e) => onStart(e.detail === 0)}
           className="min-h-[52px] w-full max-w-[280px] rounded-2xl bg-gold text-lg font-extrabold text-ink shadow-lg shadow-black/40 active:bg-gold-deep"
         >
           Start

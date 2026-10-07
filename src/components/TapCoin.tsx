@@ -114,7 +114,7 @@ export const TapCoin = forwardRef<HTMLButtonElement, Props>(function TapCoin({ e
       onClick={onClick}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <img ref={imgRef} src={falconCoin} alt="" width={484} height={515} draggable={false} />
+      <img ref={imgRef} src={falconCoin} alt="" width={600} height={600} draggable={false} />
       {floats.items.map((f) => (
         <span
           key={f.id}

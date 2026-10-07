@@ -141,9 +141,10 @@ const App = () => {
   };
 
   const focusCoin = useRef(false);
-  const start = () => {
+  const start = (fromKeyboard: boolean) => {
     sound.unlock();
-    focusCoin.current = true;
+    // Keyboard users continue on the coin; after a tap or click, a focus ring would just be noise.
+    focusCoin.current = fromKeyboard;
     setSettings((s) => ({ ...s, introSeen: true }));
   };
   // Hand focus from Start to the coin once the intro is gone.
