@@ -86,4 +86,4 @@ The full plan is in [Plan.md](Plan.md), and the original brief is in [docs/requi
 
 If you like this project, consider **buying me a coffee**. Your support keeps me going! 💛
 
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat&logo=coffee&logoColor=black)](https://razorpay.me/@pycraftr)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat&logo=coffee&logoColor=black)](https://razorpay.me/@akashchaudharifreelanceservic)
