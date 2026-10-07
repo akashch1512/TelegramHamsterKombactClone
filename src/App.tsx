@@ -1,188 +1,236 @@
-import { useEffect, useState } from 'react';
-import './index.css';
-import { bear, coin, highVoltage, notcoin, rocket } from './images';
-import tapSound from './sounds/tapsound.mp3';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { maxEnergy } from '../shared/boosts.ts';
+import { CATALOG_BY_ID } from '../shared/catalog.ts';
+import { incomePerHour } from '../shared/cards.ts';
+import { TAP_COST } from '../shared/economy.ts';
+import { LABORS, levelFor } from '../shared/levels.ts';
+import { msUntilFull, settle, type PurchaseResult } from '../shared/rules.ts';
+import { Announcer, type Announcement } from './components/Announcer.tsx';
+import { BottomNav, type Tab } from './components/BottomNav.tsx';
+import { DebugPanel } from './components/DebugPanel.tsx';
+import { GameShell } from './components/GameShell.tsx';
+import { LevelUpDialog } from './components/LevelUpDialog.tsx';
+import { OfflineIncomeDialog } from './components/OfflineIncomeDialog.tsx';
+import { formatFull } from './game/format.ts';
+import { LocalStore } from './game/localStore.ts';
+import { loadSettings, saveSettings, type Settings } from './game/persistence.ts';
+import type { ResumeReport } from './game/store.ts';
+import { useNow } from './game/useNow.ts';
+import { useTapSound } from './hooks/useTapSound.ts';
+import { bear, coin } from './images';
+import { BoostsScreen } from './screens/BoostsScreen.tsx';
+import { ComingSoon } from './screens/ComingSoon.tsx';
+import { IntroScreen } from './screens/IntroScreen.tsx';
+import { MineScreen } from './screens/MineScreen.tsx';
+import { StoryScreen } from './screens/StoryScreen.tsx';
+import { TapScreen } from './screens/TapScreen.tsx';
+import { haptic, initTelegram } from './telegram.ts';
+
+/** Pop-ups wait on the Tap screen for this long without a tap, so they never interrupt a streak (Plan.md B2). */
+const IDLE_BEFORE_POPUP_MS = 2_000;
+/** Shorter absences aren't worth a "While you were away" dialog. */
+const MIN_AWAY_FOR_DIALOG_MS = 60_000;
+
+const PURCHASE_ERRORS: Record<string, string> = {
+  insufficient: 'Not enough coins yet',
+  'max-level': 'Already at the maximum level',
+  locked: 'Unlock the card above it first',
+  unavailable: 'Not available yet',
+};
+
+const showDebug = import.meta.env.DEV && new URLSearchParams(window.location.search).has('debug');
 
 const App = () => {
-  const [points, setPoints] = useState(0);
-  const [energy, setEnergy] = useState(2652);
-  const [clicks, setClicks] = useState<{ id: number, x: number, y: number }[]>([]);
-  const [notcoinPressed, setNotcoinPressed] = useState(false);
-  const pointsToAdd = 2;
-  const energyToReduce = 12;
-  const level_points = 1000000;
+  const [store] = useState(() => new LocalStore(Date.now()));
+  const state = useSyncExternalStore(store.subscribe, store.getState);
+  const tick = useNow(200);
+  // Never settle the display at a time before the store's own last update.
+  const viewAt = Math.max(tick, state.energyAt, state.incomeAt);
+  const view = settle(state, viewAt);
 
-  const handleClick = (x: number, y: number, pointsToAdd: number) => {
-    if (energy - energyToReduce < 0) {
-      return;
-    }
+  const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [tab, setTab] = useState<Tab>('tap');
+  const [storyOpen, setStoryOpen] = useState(false);
+  const [away, setAway] = useState<ResumeReport | null>(null);
+  const [message, setMessage] = useState<Announcement | null>(null);
+  const coinRef = useRef<HTMLButtonElement>(null);
+  const lastTapAt = useRef(Date.now()); // the idle window also starts at load
+  const lastErrorAt = useRef(0);
+  const emptyAnnounced = useRef(false);
+  const sound = useTapSound(settings.muted);
 
-    setPoints(points + pointsToAdd);
-    setEnergy(energy - energyToReduce < 0 ? 0 : energy - energyToReduce);
-    setClicks([...clicks, { id: Date.now(), x, y }]);
-    setNotcoinPressed(true);
+  useEffect(() => initTelegram(), []);
+  useEffect(() => store.start(), [store]);
+  useEffect(() => saveSettings(settings), [settings]);
 
-    // Play sound
-    const audio = new Audio(tapSound);
-    audio.play();
-
-    // Reset pressed state after animation
-    setTimeout(() => {
-      setNotcoinPressed(false);
-    }, 200); // Adjust timing to match animation duration
-  };
-
-  const handleAnimationEnd = (id: number) => {
-    setClicks((prevClicks) => prevClicks.filter(click => click.id !== id));
-  };
-
-  // Handle mouse click
-  const handleMouseClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    handleClick(x, y, 2); // Add 2 points for mouse click
-  };
-
-  // Handle touch start (for mobile)
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    e.preventDefault();
-
-    // Deduct 2 points for any touch event
-    const pointsToDeduct = 2;
-    setPoints(points => Math.max(points - pointsToDeduct, 0));
-
-    // Get the number of active touches
-    const activeTouches = e.touches.length;
-
-    // Handle based on the number of touches
-    switch (activeTouches) {
-      case 1:
-        const touch1 = e.touches[0];
-        const rect1 = e.currentTarget.getBoundingClientRect();
-        const x1 = touch1.clientX - rect1.left;
-        const y1 = touch1.clientY - rect1.top;
-        handleClick(x1, y1, 2); // Add 2 points for one finger touch
-        break;
-      case 2:
-        const touch2_1 = e.touches[0];
-        const touch2_2 = e.touches[1];
-        const rect2 = e.currentTarget.getBoundingClientRect();
-        const x2_1 = touch2_1.clientX - rect2.left;
-        const y2_1 = touch2_1.clientY - rect2.top;
-        const x2_2 = touch2_2.clientX - rect2.left;
-        const y2_2 = touch2_2.clientY - rect2.top;
-        handleClick(x2_1, y2_1, 4); // Add 4 points for two finger touch
-        handleClick(x2_2, y2_2, 4); // Add 4 points for two finger touch
-        break;
-      case 3:
-        const touch3_1 = e.touches[0];
-        const touch3_2 = e.touches[1];
-        const touch3_3 = e.touches[2];
-        const rect3 = e.currentTarget.getBoundingClientRect();
-        const x3_1 = touch3_1.clientX - rect3.left;
-        const y3_1 = touch3_1.clientY - rect3.top;
-        const x3_2 = touch3_2.clientX - rect3.left;
-        const y3_2 = touch3_2.clientY - rect3.top;
-        const x3_3 = touch3_3.clientX - rect3.left;
-        const y3_3 = touch3_3.clientY - rect3.top;
-        handleClick(x3_1, y3_1, 6); // Add 6 points for three finger touch
-        handleClick(x3_2, y3_2, 6); // Add 6 points for three finger touch
-        handleClick(x3_3, y3_3, 6); // Add 6 points for three finger touch
-        break;
-      default:
-        // Handle other cases if needed
-        break;
-    }
-  };
-
-  // useEffect hook to restore energy over time
+  const announce = useCallback((text: string, visible = false) => setMessage({ text, visible }), []);
   useEffect(() => {
-    const interval = setInterval(() => {
-      setEnergy((prevEnergy) => Math.min(prevEnergy + 1, level_points));
-    }, 100); // Restore 10 energy points every second
+    if (!message) return;
+    const t = window.setTimeout(() => setMessage(null), 2_500);
+    return () => window.clearTimeout(t);
+  }, [message]);
 
-    return () => clearInterval(interval); // Clear interval on component unmount
-  }, []);
+  // Income earned while closed or hidden.
+  const resume = useCallback(() => {
+    const report = store.resume(Date.now());
+    if (report.credited > 0 && report.awayMs >= MIN_AWAY_FOR_DIALOG_MS) setAway(report);
+  }, [store]);
+  useEffect(() => {
+    resume();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') resume();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [resume]);
+
+  // Levels come from lifetime earnings; each completion dialog shows exactly once.
+  const level = levelFor(view.earnedTotal);
+  const prevLevel = useRef(level);
+  useEffect(() => {
+    if (level > prevLevel.current) announce(`Labor ${level} complete: ${LABORS[level - 1].title}`);
+    prevLevel.current = level;
+    // A reset save must not leave the celebrated level ahead of the real one.
+    if (level < settings.celebratedLevel) setSettings((s) => ({ ...s, celebratedLevel: level }));
+  }, [level, settings.celebratedLevel, announce]);
+  const idle = tick - lastTapAt.current >= IDLE_BEFORE_POPUP_MS;
+  const pendingLabor = level > settings.celebratedLevel ? settings.celebratedLevel + 1 : null;
+
+  const handleTap = useCallback(() => {
+    const t = Date.now();
+    lastTapAt.current = t;
+    const result = store.tap(t);
+    if (result.accepted) {
+      emptyAnnounced.current = false;
+      sound.play();
+      haptic('tap');
+    } else {
+      if (t - lastErrorAt.current > 600) {
+        lastErrorAt.current = t;
+        haptic('error');
+      }
+      if (!emptyAnnounced.current) {
+        emptyAnnounced.current = true;
+        announce('Out of energy. It refills over time.');
+      }
+    }
+    return result;
+  }, [store, sound, announce]);
+
+  const reportPurchase = (result: PurchaseResult, success: string) => {
+    if (result.ok) announce(success, true);
+    else announce(PURCHASE_ERRORS[result.reason], true);
+  };
+
+  const buyBoost = () => {
+    const result = store.buyBoost(Date.now());
+    reportPurchase(result, `Energy limit raised to ${formatFull(maxEnergy(result.state.energyLimitLevel))}`);
+  };
+
+  const buyCard = (cardId: string) => {
+    const result = store.buyCard(cardId, Date.now());
+    const entry = CATALOG_BY_ID.get(cardId);
+    const level = result.state.cards[cardId] ?? 0;
+    const success = entry?.kind === 'city' && level > 1 ? `${entry.name} upgraded to level ${level}` : `${entry?.name ?? 'Card'} unlocked`;
+    reportPurchase(result, success);
+  };
+
+  const selectTab = (next: Tab) => {
+    setTab(next);
+    setStoryOpen(false);
+  };
+
+  const focusCoin = useRef(false);
+  const start = () => {
+    sound.unlock();
+    focusCoin.current = true;
+    setSettings((s) => ({ ...s, introSeen: true }));
+  };
+  // Hand focus from Start to the coin once the intro is gone.
+  useEffect(() => {
+    if (settings.introSeen && focusCoin.current) coinRef.current?.focus({ preventScroll: true });
+    focusCoin.current = false;
+  }, [settings.introSeen]);
+
+  if (!settings.introSeen) {
+    return (
+      <GameShell dim>
+        <IntroScreen onStart={start} />
+      </GameShell>
+    );
+  }
+
+  const max = maxEnergy(view.energyLimitLevel);
+  const empty = view.energy < TAP_COST;
+
+  let screen;
+  if (tab === 'tap' && storyOpen) {
+    screen = <StoryScreen earnedTotal={view.earnedTotal} balance={view.balance} onBack={() => setStoryOpen(false)} />;
+  } else if (tab === 'tap') {
+    screen = (
+      <TapScreen
+        balance={view.balance}
+        earnedTotal={view.earnedTotal}
+        profitPerHour={incomePerHour(view.cards)}
+        energy={view.energy}
+        maxEnergy={max}
+        msToFull={msUntilFull(view, viewAt)}
+        empty={empty}
+        muted={settings.muted}
+        coinRef={coinRef}
+        onTap={handleTap}
+        onGesture={sound.unlock}
+        onToggleMute={() => setSettings((s) => ({ ...s, muted: !s.muted }))}
+        onOpenStory={() => setStoryOpen(true)}
+        onBoost={() => selectTab('boosts')}
+      />
+    );
+  } else if (tab === 'mine') {
+    screen = <MineScreen balance={view.balance} cards={view.cards} onBuy={buyCard} />;
+  } else if (tab === 'boosts') {
+    screen = <BoostsScreen balance={view.balance} energyLimitLevel={view.energyLimitLevel} onBuy={buyBoost} />;
+  } else if (tab === 'frens') {
+    screen = (
+      <ComingSoon
+        title="Frens"
+        icon={bear}
+        heading="Invite friends, earn coins"
+        body="Share your invite link and earn coins when friends join and play. Invites need player accounts, which arrive with the game server."
+        balance={view.balance}
+      />
+    );
+  } else {
+    screen = (
+      <ComingSoon
+        title="Earn"
+        icon={coin}
+        heading="Follow us, earn coins"
+        body="Join the Falcon Tap channels and social accounts for one-time coin rewards. Tasks arrive with the game server."
+        balance={view.balance}
+      />
+    );
+  }
 
   return (
-    <div className="bg-gradient-main min-h-screen px-4 flex flex-col items-center text-white font-medium">
-
-      <div className="absolute inset-0 h-1/2 bg-gradient-overlay z-0"></div>
-      <div className="absolute inset-0 flex items-center justify-center z-0">
-        <div className="radial-gradient-overlay"></div>
-      </div>
-
-      <div className="w-full z-10 min-h-screen flex flex-col items-center text-white">
-
-        <div className="fixed top-0 left-0 w-full px-4 pt-8 z-10 flex flex-col items-center text-white">
-          <div className="mt-12 text-5xl font-bold flex items-center justify-center flex-col">
-            {/* <span>{points.toLocaleString()}</span> */}
-            {/* <img src={coin} width={44} height={44} className="mt-2" alt="coin" /> */}
-          </div>
-        </div>
-
-        <div className="fixed bottom-0 left-0 w-full px-5 pb-4 z-1">
-          <div className="w-full flex justify-between gap-2">
-            <div className="w-1/3 flex items-center justify-start max-w-32">
-              <div className="flex items-center justify-center">
-                <img src={highVoltage} width={44} height={44} alt="High Voltage" />
-                <div className="ml-2 text-left">
-                  <span className="text-white text-2xl font-bold block">{energy}</span>
-                  <span className="text-white text-large opacity-75">/ 6500</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex-grow flex items-center max-w-60 text-sm">
-              <div className="w-full bg-[#fad258] py-4 rounded-2xl flex justify-around">
-                <button className="flex flex-col items-center gap-1">
-                  <img src={bear} width={24} height={24} alt="Bear" />
-                  <span>Frens</span>
-                </button>
-                <div className="h-[48px] w-[2px] bg-[#fddb6d]"></div>
-                <button className="flex flex-col items-center gap-1">
-                  <img src={coin} width={24} height={24} alt="Coin" />
-                  <span>Earn</span>
-                </button>
-                <div className="h-[48px] w-[2px] bg-[#fddb6d]"></div>
-                <button className="flex flex-col items-center gap-1">
-                  <img src={rocket} width={24} height={24} alt="Rocket" />
-                  <span>Boosts</span>
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="w-full bg-[#f9c035] rounded-full mt-4">
-            <div className="bg-gradient-to-r from-[#f3c45a] to-[#fffad0] h-4 rounded-full" style={{ width: `${(energy / 6500) * 100}%` }}></div>
-          </div>
-        </div>
-
-        <div className="flex-grow flex items-center justify-center flex-col">
-          <div className="relative mt-4" onClick={handleMouseClick} onTouchStart={handleTouchStart}>
-            <img src={notcoin} width={160} height={180} className={notcoinPressed ? "notcoin-pressed" : ""} alt="notcoin" />
-            {clicks.map((click) => (
-              <div
-                key={click.id}
-                className="absolute text-5xl font-bold opacity-0"
-                style={{
-                  top: `${click.y - 42}px`,
-                  left: `${click.x - 28}px`,
-                  animation: `float 1s ease-out`
-                }}
-                onAnimationEnd={() => handleAnimationEnd(click.id)}
-              >
-                {pointsToAdd}
-              </div>
-            ))}
-          </div>
-          <div className="mt-8 ml-3 flex items-center justify-center">
-            <img src={coin} width={44} height={44} alt="coin" />
-            <span className="ml-1 text-3xl font-bold">{points.toLocaleString()}</span>
-          </div>
-        </div>
-
-      </div>
-    </div>
+    <GameShell dim={tab !== 'tap' || storyOpen}>
+      <main className="flex min-h-0 flex-1 flex-col">{screen}</main>
+      <BottomNav active={tab} onSelect={selectTab} />
+      <Announcer message={message} />
+      {showDebug && <DebugPanel store={store} onResume={resume} />}
+      {away && <OfflineIncomeDialog credited={away.credited} awayMs={away.awayMs} onClose={() => setAway(null)} />}
+      {!away && pendingLabor !== null && idle && tab === 'tap' && !storyOpen && (
+        <LevelUpDialog
+          key={pendingLabor}
+          labor={pendingLabor}
+          onClose={() => setSettings((s) => ({ ...s, celebratedLevel: pendingLabor }))}
+          onReadStory={() => {
+            setSettings((s) => ({ ...s, celebratedLevel: pendingLabor }));
+            selectTab('tap');
+            setStoryOpen(true);
+          }}
+        />
+      )}
+    </GameShell>
   );
 };
 

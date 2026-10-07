@@ -20,7 +20,7 @@ Create an engaging Telegram game that integrates blockchain technology to provid
 - **Smart Contract (ERC-20):** A simple smart contract to manage tokens for rewards.
 
 ## Specifications
-- **Telegram Bot Token:** `7494631652:AAFgGzWNfzeijeQR4t8wMdBkZANCxfaSvDg`
+- **Telegram Bot Token:** *removed. A token was previously committed here, so it must be revoked with @BotFather. The replacement token lives only in the server environment (`BOT_TOKEN`) and must never be committed or given a `VITE_` prefix.*
 - **Blockchain Provider:** Infura (or equivalent)
 
 ## Example Commands
@@ -35,7 +35,7 @@ Create an engaging Telegram game that integrates blockchain technology to provid
 4. **User Interface:** A simple and user-friendly interface in Telegram to engage players.
 
 ## Project Running Guide
-Refer to `run_pro.txt` for detailed instructions on running the project.
+See [Running the game](#running-the-game) below. (`run_pro.txt` was never added to the repository.)
 
 ## Deployment
 The project is deployed/hosted on Netlify. You can access it via https://t.me/Arshian_Pahlevan_Bot/FalconTapGAme ( telegram game )
@@ -92,74 +92,44 @@ Consider these apps as inspiration for development:
 ## Backgrounds for the 7 Levels
 Seven backgrounds for the seven levels will be provided upon request. Please ask Akash for these resources.
 
-# help for using code 
+# Running the game
 
-This project is a clone of the popular Telegram mini app, Notcoin. The repository provides two branches:
+**Requirements:** Node.js 24 LTS (see `.nvmrc`; at least 22.18 is needed for `npm run simulate:economy`) and npm.
 
-1. **Initial Setup**: Provides the foundational structure and assets needed to build the full application.
-2. **Final Version**: The completed application with all functionalities.
+```bash
+npm ci                    # install dependencies
+npm run dev               # dev server at http://localhost:5173
+npm run build             # type-check and build to dist/
+npm run preview           # serve the production build
+npm run lint              # ESLint, zero warnings allowed
+npm test                  # unit tests (Vitest) for the game rules and save data
+npm run simulate:economy  # 31-day economy simulation (see docs/economy.md)
+```
 
-## Getting Started
+In development, add `?debug` to the URL for a small debug panel that skips ahead to the next labor, adds coins, empties energy or simulates time away. It is never included in production builds.
 
-To get started with either the initial setup or the final version, follow these instructions:
+## What works today
 
-### Cloning the Repository
+- **Tap loop:** each tap (mouse, finger or Space/Enter) scores once and spends 12 energy. Several fingers count as several taps. Energy regenerates at 10 per second, also while the game is closed.
+- **Saving (guest mode):** progress is saved in the browser's `localStorage` under `falcon-tap:v1`. Bad or edited data is validated on load. Guest progress is never moved into a Telegram account.
+- **Seven labors:** levels come from lifetime coins (1M to 1,300M), with a story chapter and educational facts for each labor (draft text in `src/content/shahnameh.ts`, pending review).
+- **Boosts:** the energy limit can be raised 10 times with coins.
+- **Mine:** Asia → Iran → Tehran cards from this README, with hourly profit and up to 3 hours of income while away. Regions, countries and cities without prices show as "Coming soon".
+- **Layout:** full-screen on phones (safe areas respected), a centered phone-shaped frame on laptops.
+- **Telegram:** inside Telegram the app expands, disables swipe-to-close, uses Telegram's back button, haptics and safe areas. It works the same in a normal browser.
 
-1. **Clone the Repository**:
+**Not built yet:** the game server and accounts, the Telegram bot commands, Frens (invites), Earn (social tasks), token rewards and the 31-day season. The Frens and Earn tabs say so. See `Plan.md` for the roadmap.
 
-    ```bash
-    git clone https://github.com/nikandr-surkov/Notcoin-Telegram-Mini-App-Clone.git
-    cd Notcoin-Telegram-Mini-App-Clone
-    ```
+## Project layout
 
-### Initial Setup
+```
+shared/    pure game rules and every tunable number (economy.ts); used by the client and, later, the server
+src/       React app: components/, screens/, game/ (store and saving), content/ (story), telegram.ts
+scripts/   economy simulation
+docs/      economy model and simulation results
+```
 
-2. **Switch to the `initial-setup` Branch**:
-
-    ```bash
-    git checkout initial-setup
-    ```
-
-3. **Install Dependencies**:
-
-    ```bash
-    npm install
-    ```
-
-4. **Run the Development Server**:
-
-    ```bash
-    npm run dev
-    ```
-
-5. **Open Your Browser**:
-
-    Navigate to localhost to see the initial setup.
-
-### Final Version
-
-2. **Switch to the `final-version` Branch**:
-
-    ```bash
-    git checkout final-version
-    ```
-
-3. **Install Dependencies**:
-
-    ```bash
-    npm install
-    ```
-
-4. **Run the Development Server**:
-
-    ```bash
-    npm run dev
-    ```
-
-5. **Open Your Browser**:
-
-    Navigate to localhost to see the final version of the application.
-
+**Secrets:** never put the bot token or any other secret in this repository, in client code or in a `VITE_` variable (Vite bundles those into the client). Server secrets will live only in the server's environment.
 
 #new reqirment's
 ### Game Concept: Tap-to-Earn Based on Shahnameh

@@ -2,53 +2,252 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- Document (Plan.md A6) ------------------------------------------------ */
+
+:root {
+  color-scheme: dark;
+  /* Laptop frame height (Plan.md §2.2); vh fallback for browsers without dvh. */
+  --frame-h: min(calc(100vh - 48px), 900px);
+  /* Safe areas: the device inset, or Telegram's own (Bot API 8.0+) when larger. */
+  --safe-top: max(env(safe-area-inset-top, 0px), calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)));
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), calc(var(--tg-safe-area-inset-bottom, 0px) + var(--tg-content-safe-area-inset-bottom, 0px)));
+  --safe-left: max(env(safe-area-inset-left, 0px), var(--tg-safe-area-inset-left, 0px));
+  --safe-right: max(env(safe-area-inset-right, 0px), var(--tg-safe-area-inset-right, 0px));
+}
+
+@supports (height: 100dvh) {
+  :root { --frame-h: min(calc(100dvh - 48px), 900px); }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #140b06;
+}
+
 body {
-  font-family: sans-serif;
-}
-@keyframes tapAnimation {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(0.95);
-  }
-  100% {
-    transform: scale(1);
-  }
+  color: #fff8e7;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
-.notcoin-pressed {
-  animation: tapAnimation 0.2s ease-out;
+/* ---- Game surface: phone, column or laptop frame (Plan.md A7) ------------- */
+
+.app-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
-@keyframes float {
-  0% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-50px);
-  }
-}
-
-.bg-gradient-main {
-  background: url('./images/file-K0eijCKhX0pDOEHjPedRe694.jpeg') no-repeat center center;
-  background-size: cover; /* This will make the image cover the entire background */
-  margin: 12px;
-  height: 100vh;
-  width: 100vw; /* Changed to 100vw to cover the full width of the viewport */
-  overflow: hidden; 
-}
-
-
-/* .bg-gradient-overlay {
-  background: linear-gradient(180deg, rgb(6, 2, 2) 0%, rgba(0,0,0,1) 40%, rgba(0,212,255,0) 100%);
-} */
-
-/* .radial-gradient-overlay {
+.backdrop {
+  display: none;
   position: absolute;
+  inset: -48px;
+  background: #140b06 url('./images/shahnameh-wide.jpg') center / cover no-repeat;
+  filter: blur(28px) brightness(0.35) saturate(1.1);
+  pointer-events: none;
+}
+
+.surface {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle, rgba(250, 214, 92, 0.8) 0%, rgba(250, 214, 92, 0) 60%);
-} */
+  overflow: hidden;
+  background: #140b06;
+  container-type: inline-size;
+
+  /* Touch hygiene (Plan.md A9) */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.surface img {
+  -webkit-user-drag: none;
+}
+
+@media (min-width: 600px) {
+  .backdrop { display: block; }
+  .surface { width: 430px; }
+}
+
+@media (min-width: 600px) and (min-height: 640px) {
+  .surface {
+    height: var(--frame-h);
+    width: clamp(360px, calc(var(--frame-h) * 0.5), 430px);
+    border-radius: 32px;
+    box-shadow: 0 30px 90px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(250 210 88 / 0.22);
+  }
+}
+
+/* Background art with scrims so text stays readable (Plan.md L5). */
+.surface-art {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgb(20 11 6 / 0.9) 0%, rgb(20 11 6 / 0.45) 30%, rgb(20 11 6 / 0.5) 62%, rgb(20 11 6 / 0.94) 100%),
+    #140b06 url('./images/shahnameh-portrait.jpg') center / cover no-repeat;
+  transition: opacity 0.3s;
+}
+
+.surface-art--dim::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgb(20 11 6 / 0.82);
+}
+
+.safe {
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
+
+.scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(250 210 88 / 0.35) transparent;
+}
+
+/* ---- Tap coin (Plan.md A3, A4, A10) --------------------------------------- */
+
+.coin-area {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+
+.coin {
+  position: relative;
+  width: min(68vw, 300px);
+  /* Fits the remaining space at the art's 484:515 ratio, leaving room for floats. */
+  width: min(70cqw, calc(86cqh * 484 / 515));
+  aspect-ratio: 484 / 515;
+  border-radius: 50%;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.coin img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  filter: drop-shadow(0 12px 32px rgb(250 210 88 / 0.35));
+  transition: filter 0.3s;
+}
+
+.coin[aria-disabled='true'] img {
+  filter: grayscale(0.75) brightness(0.55);
+}
+
+.coin:focus-visible {
+  outline: 3px solid #fad258;
+  outline-offset: 6px;
+}
+
+.float {
+  position: absolute;
+  pointer-events: none;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 0 2px 6px rgb(0 0 0 / 0.7), 0 0 14px rgb(250 210 88 / 0.85);
+  transform: translate(-50%, -50%);
+  animation: float-up 0.9s ease-out forwards;
+}
+
+@keyframes float-up {
+  from { opacity: 1; transform: translate(-50%, -50%); }
+  to { opacity: 0; transform: translate(-50%, calc(-50% - 90px)); }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ---- Shared pieces -------------------------------------------------------- */
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.text-shadow {
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.75);
+}
+
+.balance {
+  font-size: 2.25rem;
+  font-size: clamp(1.75rem, 11cqi, 2.75rem);
+}
+
+.energy-figure {
+  font-size: 1.125rem;
+  font-size: clamp(0.95rem, 5.4cqi, 1.125rem);
+}
+
+.bar-fill {
+  transition: width 0.25s linear;
+}
+
+dialog.sheet {
+  width: calc(100% - 32px);
+  max-width: 398px;
+  max-height: calc(100% - 48px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+dialog.sheet::backdrop {
+  background: rgb(0 0 0 / 0.65);
+}
+
+.toast {
+  position: absolute;
+  top: calc(var(--safe-top) + 12px);
+  left: 50%;
+  z-index: 30;
+  max-width: calc(100% - 32px);
+  transform: translateX(-50%);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: #fad258;
+  color: #4A2511;
+  font-weight: 700;
+  font-size: 0.875rem;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+}
+
+/* ---- Reduced motion (Plan.md A10) ----------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .float { animation-name: fade-out; }
+  .bar-fill,
+  .surface-art,
+  .coin img { transition: none; }
+}
